@@ -1,0 +1,24 @@
+{
+  "name": "xlay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive intent and context optimizer for Claude Code and Codex, powered by Jev decisions.",
+  "type": "module",
+  "bin": {
+    "xlay": "dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "check": "npm run build && node --test dist/tests/*.test.js",
+    "dev": "tsx src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.0",
+    "tsx": "4.20.0",
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
