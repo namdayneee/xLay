@@ -27,6 +27,8 @@ Claude
 
 Claude is the default. Type `/codex` (or simply `codex`) to switch to Codex. Type `/claude` to switch back. xLay keeps a separate resumable session id for each agent during the shell session.
 
+The input frame shows both borders while editing. Long prompts scroll horizontally; Enter submits and displays the complete prompt in scrollback. Arrow keys and readline history remain available. Resizing redraws the frame to fit the terminal.
+
 The terminal logo fades from blue through purple to pink, with a compact `xLay` wordmark in narrow terminals. Responses from both agents render Markdown headings, emphasis, lists, links, quotes and code in the terminal instead of displaying formatting markers. Literal code retains its original characters and indentation. This is xLay's response renderer; the agents' interactive interfaces are not included in their JSON output.
 
 ## Requirements

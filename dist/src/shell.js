@@ -1,4 +1,3 @@
-import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { runAgent } from "./agents/index.js";
 import { compileAgentPrompt } from "./compiler.js";
@@ -8,7 +7,7 @@ import { appendHistory } from "./history.js";
 import { analyzeWithJev } from "./jev/client.js";
 import { commandExists } from "./process.js";
 import { ShellState } from "./session/state.js";
-import { readInput } from "./input.js";
+import { ShellInput } from "./input.js";
 import { c, printAgentSwitch, printAgentTitle, printError, printHeader, printJevSummary, } from "./ui.js";
 function normalizeCommand(value) {
     const v = value.trim().toLowerCase();
@@ -27,23 +26,12 @@ export async function runShell(cwd = process.cwd()) {
     const apiKey = resolveJevApiKey();
     const endpoint = resolveJevEndpoint(config);
     const state = new ShellState(config.defaultAgent);
-    const rl = readline.createInterface({ input, output, terminal: Boolean(input.isTTY && output.isTTY) });
-    let closing = false;
-    rl.on("SIGINT", () => {
-        closing = true;
-        rl.close();
-    });
+    const reader = new ShellInput(input, output);
     printHeader(cwd, state.agent, Boolean(apiKey));
-    while (!closing) {
-        let raw;
-        try {
-            raw = await readInput(rl, output);
-        }
-        catch (error) {
-            if (error?.code === "ERR_USE_AFTER_CLOSE")
-                break;
-            throw error;
-        }
+    while (true) {
+        const raw = await reader.read();
+        if (raw === undefined)
+            break;
         const message = raw.trim();
         if (!message)
             continue;
@@ -87,8 +75,7 @@ export async function runShell(cwd = process.cwd()) {
         }
         console.log();
     }
-    if (!closing)
-        rl.close();
+    reader.close();
     console.log(c.dim("xLay closed."));
 }
 //# sourceMappingURL=shell.js.map
