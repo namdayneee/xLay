@@ -8,15 +8,13 @@ import { appendHistory } from "./history.js";
 import { analyzeWithJev } from "./jev/client.js";
 import { commandExists } from "./process.js";
 import { ShellState } from "./session/state.js";
+import { readInput } from "./input.js";
 import {
   c,
-  inputPrompt,
   printAgentSwitch,
   printAgentTitle,
   printError,
   printHeader,
-  printInputBottom,
-  printInputTop,
   printJevSummary,
 } from "./ui.js";
 
@@ -44,15 +42,13 @@ export async function runShell(cwd = process.cwd()): Promise<void> {
   printHeader(cwd, state.agent, Boolean(apiKey));
 
   while (!closing) {
-    printInputTop();
     let raw: string;
     try {
-      raw = await rl.question(inputPrompt());
+      raw = await readInput(rl, output);
     } catch (error: any) {
       if (error?.code === "ERR_USE_AFTER_CLOSE") break;
       throw error;
     }
-    printInputBottom();
     const message = raw.trim();
     if (!message) continue;
 

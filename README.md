@@ -5,13 +5,20 @@ xLay is an interactive terminal layer in front of Claude Code and Codex. You ope
 ## Daily UX
 
 ```text
-xLay
+          ██╗
+██╗  ██╗  ██║       █████╗  ██╗   ██╗
+ ╚███╔╝   ██║      ██╔══██╗ ╚██╗ ██╔╝
+ ██╔██╗   ██║      ███████║  ╚████╔╝
+██╔╝ ██╗  ███████╗ ██║  ██║   ╚██╔╝
+╚═╝  ╚═╝  ╚══════╝ ╚═╝  ╚═╝    ██║
+                               ╚═╝
+
 Matavi · Claude · Jev ✓
 /claude  /codex  /help  /exit
 
-╭─ message ─────────────────────────────────────────
-│ › sửa login, giữ nguyên UI và đừng đổi database
-╰───────────────────────────────────────────────────
+────────────────────────────────────────────────────
+> sửa login, giữ nguyên UI và đừng đổi database
+────────────────────────────────────────────────────
 Jev: bug_fix 96% · scope minimal · context 4
 
 Claude
@@ -19,6 +26,8 @@ Claude
 ```
 
 Claude is the default. Type `/codex` (or simply `codex`) to switch to Codex. Type `/claude` to switch back. xLay keeps a separate resumable session id for each agent during the shell session.
+
+The terminal logo fades from blue through purple to pink, with a compact `xLay` wordmark in narrow terminals. Responses from both agents render Markdown headings, emphasis, lists, links, quotes and code in the terminal instead of displaying formatting markers. Literal code retains its original characters and indentation. This is xLay's response renderer; the agents' interactive interfaces are not included in their JSON output.
 
 ## Requirements
 
@@ -31,19 +40,20 @@ Claude is the default. Type `/codex` (or simply `codex`) to switch to Codex. Typ
 ## Install locally
 
 ```bash
-npm install
-npm run check
-npm run build
-npm link
+cd xLay
+npm link --ignore-scripts --omit=dev
 xlay setup
 xlay doctor
+xlay
 ```
 
-Then enter any Git repository and run:
+The repository includes the built JavaScript CLI, so this install needs no build step or development dependencies. After setup, enter any Git repository and run:
 
 ```bash
 xlay
 ```
+
+For development, run `npm install --include=dev` and `npm run check`. Commit the updated `dist/src/*.js` files (including subdirectories) whenever source changes so the quick install stays current.
 
 ## Commands
 

@@ -37,21 +37,24 @@ export async function spawnLines(options: SpawnLinesOptions): Promise<number> {
   let stdoutBuffer = "";
   let stderrBuffer = "";
 
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
+  // Both output streams are explicitly piped above.
+  const stdout = child.stdout!;
+  const stderr = child.stderr!;
+  stdout.setEncoding("utf8");
+  stderr.setEncoding("utf8");
 
   if (options.stdinData !== undefined && child.stdin) {
     child.stdin.end(options.stdinData);
   }
 
-  child.stdout.on("data", (chunk: string) => {
+  stdout.on("data", (chunk: string) => {
     stdoutBuffer += chunk;
     const parts = stdoutBuffer.split(/\r?\n/);
     stdoutBuffer = parts.pop() ?? "";
     for (const line of parts) options.onStdoutLine(line);
   });
 
-  child.stderr.on("data", (chunk: string) => {
+  stderr.on("data", (chunk: string) => {
     stderrBuffer += chunk;
     const parts = stderrBuffer.split(/\r?\n/);
     stderrBuffer = parts.pop() ?? "";

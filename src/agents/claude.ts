@@ -1,6 +1,7 @@
 import type { AgentRunResult } from "../types.js";
 import { spawnLines } from "../process.js";
 import { c } from "../ui.js";
+import { printResponse } from "../markdown.js";
 
 function textBlocks(content: unknown): string[] {
   if (!Array.isArray(content)) return [];
@@ -37,7 +38,7 @@ export async function runClaude(
           const texts = textBlocks(event.message?.content);
           for (const text of texts) {
             if (!text.trim()) continue;
-            process.stdout.write(`${text.trim()}\n`);
+            printResponse(text);
             emittedAssistant = true;
           }
           const toolUses = Array.isArray(event.message?.content)
@@ -51,7 +52,7 @@ export async function runClaude(
         if (event.type === "result") {
           if (event.usage && typeof event.usage === "object") usage = event.usage;
           if (!emittedAssistant && typeof event.result === "string" && event.result.trim()) {
-            console.log(event.result.trim());
+            printResponse(event.result);
           }
         }
       } catch {

@@ -25,11 +25,34 @@ export function agentLabel(agent: AgentName): string {
   return agent === "claude" ? c.cyan("Claude") : c.green("Codex");
 }
 
+export function renderLogo(columns = process.stdout.columns || 80, color = Boolean(process.stdout.isTTY)): string {
+  const rows = [
+    "          ██╗                         ",
+    "██╗  ██╗  ██║       █████╗  ██╗   ██╗",
+    " ╚███╔╝   ██║      ██╔══██╗ ╚██╗ ██╔╝",
+    " ██╔██╗   ██║      ███████║  ╚████╔╝ ",
+    "██╔╝ ██╗  ███████╗ ██║  ██║   ╚██╔╝  ",
+    "╚═╝  ╚═╝  ╚══════╝ ╚═╝  ╚═╝    ██║   ",
+    "                               ╚═╝   ",
+  ];
+  const stops = [[77, 165, 232], [143, 126, 214], [213, 115, 153]];
+  const selected = columns < 40 ? ["xLay"] : rows;
+  return selected.map(row => Array.from(row).map((char, index) => {
+    if (!color || char === " ") return char;
+    const position = index / Math.max(1, row.length - 1) * 2;
+    const segment = Math.min(1, Math.floor(position));
+    const fraction = position - segment;
+    const rgb = stops[segment].map((start, channel) => Math.round(start + (stops[segment + 1][channel] - start) * fraction));
+    return `\u001b[38;2;${rgb.join(";")}m${char}`;
+  }).join("") + (color ? reset : "")).join("\n");
+}
+
 export function printHeader(cwd: string, agent: AgentName, jevReady: boolean): void {
   const repo = path.basename(cwd) || cwd;
   const jev = jevReady ? c.green("Jev ✓") : c.yellow("Jev fallback");
   console.log();
-  console.log(c.bold("xLay"));
+  console.log(renderLogo());
+  console.log();
   console.log(`${c.dim(repo)}  ·  ${agentLabel(agent)}  ·  ${jev}`);
   console.log(c.dim("/claude  /codex  /help  /exit"));
   console.log();
@@ -57,14 +80,10 @@ export function printError(message: string): void {
   console.error(c.red(`xLay: ${message}`));
 }
 
-export function printInputTop(): void {
-  console.log(c.dim("╭─ message ─────────────────────────────────────────"));
-}
-
 export function inputPrompt(): string {
-  return `${c.dim("│")} ${c.bold("›")} `;
+  return `${c.bold(">")} `;
 }
 
-export function printInputBottom(): void {
-  console.log(c.dim("╰───────────────────────────────────────────────────"));
+export function inputRule(columns = process.stdout.columns || 80): string {
+  return "─".repeat(Math.max(1, columns - 1));
 }

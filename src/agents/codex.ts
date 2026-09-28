@@ -1,6 +1,7 @@
 import type { AgentRunResult } from "../types.js";
 import { spawnLines } from "../process.js";
 import { c } from "../ui.js";
+import { printResponse } from "../markdown.js";
 
 function shortCommand(value: string): string {
   return value.length <= 90 ? value : `${value.slice(0, 87)}...`;
@@ -33,7 +34,7 @@ export async function runCodex(
         if (event.type === "item.completed") {
           const item = event.item ?? {};
           if (item.type === "agent_message" && typeof item.text === "string") {
-            console.log(item.text.trim());
+            printResponse(item.text);
           } else if (item.type === "command_execution" && typeof item.command === "string") {
             console.log(c.dim(`↳ ${shortCommand(item.command)}`));
           } else if (item.type === "file_change") {
