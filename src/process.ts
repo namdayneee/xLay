@@ -7,7 +7,9 @@ export function findExecutable(name: string): string | undefined {
   const first = result.stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .find(Boolean);
+    // npm also installs a POSIX shim without an extension. Windows cannot
+    // spawn that file; select its .cmd sibling (or a native executable).
+    .find((line) => Boolean(line) && (process.platform !== "win32" || /\.(exe|com|cmd|bat)$/i.test(line)));
   return first || undefined;
 }
 

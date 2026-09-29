@@ -1,64 +1,93 @@
 import type { AgentRunResult } from "../types.js";
-import { spawnLines } from "../process.js";
 import { c } from "../ui.js";
 import { printResponse } from "../markdown.js";
+import { denyApproval, type Approve } from "../approvals.js";
+import { runChannel, type RunChannel } from "./channel.js";
 
-function shortCommand(value: string): string {
-  return value.length <= 90 ? value : `${value.slice(0, 87)}...`;
-}
-
-export async function runCodex(
-  prompt: string,
-  cwd: string,
-  sessionId?: string,
-): Promise<AgentRunResult> {
-  const args = ["exec", "--json", "--color", "never"];
-  if (sessionId) args.push("resume", sessionId, "-");
-
+export async function runCodex(prompt: string, cwd: string, sessionId?: string,
+  approve: Approve = denyApproval, transport: RunChannel = runChannel, signal?: AbortSignal): Promise<AgentRunResult> {
   let discoveredSessionId = sessionId;
+  let turnId: string | undefined;
+  let completed = false;
+  let failed = false;
   let usage: Record<string, unknown> | undefined;
-
-  const exitCode = await spawnLines({
-    command: "codex",
-    args,
-    cwd,
-    stdinData: prompt,
-    onStdoutLine(line) {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      try {
-        const event = JSON.parse(trimmed) as any;
-        if (event.type === "thread.started" && typeof event.thread_id === "string") {
-          discoveredSessionId = event.thread_id;
+  let startup: NodeJS.Timeout | undefined;
+  const items = new Map<string, unknown>();
+  const pending = new Map<string | number, AbortController>();
+  const handled = new Set<string | number>();
+  try {
+    const exitCode = await transport({
+      command: "codex", args: ["app-server"], cwd, signal,
+      start(channel) {
+        startup = setTimeout(() => channel.fail(new Error("Codex app-server initialization timed out. Update Codex CLI and try again.")), 30000);
+        channel.send({ id: "xlay-init", method: "initialize", params: { clientInfo: { name: "xlay", title: "xLay", version: "1.0.0" } } });
+      },
+      async receive(event, channel) {
+        if (event.error && ["xlay-init", "xlay-thread", "xlay-turn"].includes(event.id)) {
+          throw new Error(`Codex app-server: ${event.error.message}. A CLI supporting thread/start and thread/resume is required; update Codex CLI. No permission settings were changed.`);
         }
-        if (event.type === "item.completed") {
-          const item = event.item ?? {};
-          if (item.type === "agent_message" && typeof item.text === "string") {
-            printResponse(item.text);
-          } else if (item.type === "command_execution" && typeof item.command === "string") {
-            console.log(c.dim(`↳ ${shortCommand(item.command)}`));
-          } else if (item.type === "file_change") {
-            const count = Array.isArray(item.changes) ? item.changes.length : 1;
-            console.log(c.dim(`↳ file change (${count})`));
-          } else if (item.type === "error" && typeof item.message === "string") {
-            console.error(item.message);
+        if (event.id === "xlay-init" && event.result) {
+          channel.send({ method: "initialized", params: {} });
+          channel.send({ id: "xlay-thread", method: sessionId ? "thread/resume" : "thread/start", params: { cwd, ...(sessionId ? { threadId: sessionId } : {}) } });
+          return;
+        }
+        if (event.id === "xlay-thread" && event.result) {
+          if (typeof event.result.thread?.id !== "string") throw new Error("Codex returned no thread id.");
+          discoveredSessionId = event.result.thread.id;
+          channel.send({ id: "xlay-turn", method: "turn/start", params: { threadId: discoveredSessionId, input: [{ type: "text", text: prompt }] } });
+          return;
+        }
+        if (event.id === "xlay-turn" && event.result) { clearTimeout(startup); turnId = event.result.turn?.id; return; }
+        const p = event.params ?? {};
+        if (event.method === "serverRequest/resolved") { pending.get(p.requestId)?.abort(); return; }
+        if (event.id !== undefined && typeof event.method === "string") {
+          if (handled.has(event.id)) return;
+          handled.add(event.id);
+          const permission = event.method === "item/permissions/requestApproval";
+          const command = event.method === "item/commandExecution/requestApproval";
+          const file = event.method === "item/fileChange/requestApproval";
+          if (!permission && !command && !file) {
+            channel.send({ id: event.id, error: { code: -32601, message: "xLay does not support this interactive request" } });
+            return;
           }
+          const controller = new AbortController();
+          const abort = () => controller.abort();
+          channel.signal.addEventListener("abort", abort, { once: true });
+          pending.set(event.id, controller);
+          try {
+            const sameTurn = p.threadId === discoveredSessionId && (!turnId || p.turnId === turnId);
+            const canAccept = !command || !Array.isArray(p.availableDecisions) || p.availableDecisions.includes("accept");
+            const allowed = sameTurn && canAccept && await approve({ agent: "codex", title: permission ? "Cấp quyền cho lượt này" : file ? "Thay đổi file" : "Chạy lệnh",
+              details: { ...p, ...(items.has(p.itemId) ? { proposed: items.get(p.itemId) } : {}) } }, controller.signal);
+            if (!controller.signal.aborted) channel.send({ id: event.id, result: permission
+              ? { permissions: allowed ? p.permissions ?? {} : {}, scope: "turn" }
+              : { decision: allowed ? "accept" : "decline" } });
+          } finally { pending.delete(event.id); channel.signal.removeEventListener("abort", abort); }
+          return;
         }
-        if (event.type === "turn.completed" && event.usage && typeof event.usage === "object") {
-          usage = event.usage;
+        if (p.threadId && p.threadId !== discoveredSessionId) return;
+        if (event.method === "turn/started") { clearTimeout(startup); turnId = p.turn?.id; }
+        if (event.method === "item/started" && p.item?.id) items.set(p.item.id, p.item);
+        if (event.method === "item/completed") {
+          const item = p.item ?? {};
+          if (item.type === "agentMessage" && typeof item.text === "string") printResponse(item.text);
+          else if (item.type === "commandExecution") console.log(c.dim(`↳ ${item.command ?? "command"}`));
+          else if (item.type === "fileChange") console.log(c.dim(`↳ file change (${item.changes?.length ?? 0})`));
+          items.delete(item.id);
         }
-        if (event.type === "turn.failed") {
-          const message = event.error?.message;
-          if (typeof message === "string") console.error(message);
+        if (event.method === "thread/tokenUsage/updated") {
+          const last = p.tokenUsage?.last;
+          if (last) usage = { input_tokens: last.inputTokens, output_tokens: last.outputTokens, cached_input_tokens: last.cachedInputTokens };
         }
-      } catch {
-        console.log(trimmed);
-      }
-    },
-    onStderrLine(line) {
-      if (line.trim()) console.error(c.dim(line));
-    },
-  });
-
-  return { sessionId: discoveredSessionId, exitCode, usage };
+        if (event.method === "error" && typeof p.error?.message === "string") console.error(p.error.message);
+        if (event.method === "turn/completed") {
+          completed = true; failed = p.turn?.status !== "completed";
+          if (p.turn?.error?.message) console.error(p.turn.error.message);
+          channel.finish();
+        }
+      },
+      stderr(line) { if (line.trim()) console.error(c.dim(line)); },
+    });
+    return { sessionId: discoveredSessionId, exitCode: failed || !completed ? exitCode || 1 : exitCode, usage };
+  } finally { clearTimeout(startup); for (const controller of pending.values()) controller.abort(); }
 }

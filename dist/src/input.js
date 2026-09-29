@@ -1,6 +1,8 @@
 import readline from "node:readline/promises";
 import { Writable } from "node:stream";
 import { c, inputRule } from "./ui.js";
+import { approvalPreview } from "./approvals.js";
+import { stripVTControlCharacters } from "node:util";
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 function width(value) {
     const cp = value.codePointAt(0) || 0;
@@ -44,6 +46,9 @@ export class ShellInput {
     terminal;
     closed = false;
     abort;
+    approvalQueue = Promise.resolve();
+    cancellation = new AbortController();
+    get signal() { return this.cancellation.signal; }
     constructor(input, output) {
         this.input = input;
         this.output = output;
@@ -53,9 +58,69 @@ export class ShellInput {
         const silent = new Writable({ write(_chunk, _encoding, done) { done(); } });
         this.rl = readline.createInterface({ input, output: this.terminal ? silent : output, terminal: this.terminal });
         this.rl.on("SIGINT", () => this.close());
-        this.rl.on("close", () => { this.closed = true; this.abort?.abort(); });
+        this.rl.on("close", () => { this.closed = true; this.abort?.abort(); this.cancellation.abort(); });
     }
     close() { this.rl.close(); }
+    approve(request, signal) {
+        const pending = this.approvalQueue.then(() => this.chooseApproval(request, signal));
+        this.approvalQueue = pending.catch(() => false);
+        return pending;
+    }
+    async chooseApproval(request, signal) {
+        if (this.closed || signal.aborted)
+            return false;
+        // Tool text stays inside a quoted preview and cannot emit terminal controls.
+        const safe = (text) => stripVTControlCharacters(text).replace(/[\p{Control}\p{Format}]/gu, char => char === "\n" || char === "\t" ? char : "");
+        const preview = safe(approvalPreview(request)).split("\n").map(line => `  │ ${line}`).join("\n");
+        this.output.write(`\n${c.bold(`${request.agent === "claude" ? "Claude" : "Codex"} · Cần cấp quyền`)}\n${JSON.stringify(safe(request.title))}\n${preview}\n`);
+        if (!this.terminal) {
+            this.output.write("Không có terminal tương tác — đã từ chối yêu cầu cấp quyền.\n");
+            return false;
+        }
+        let allow = false;
+        this.output.write("1/y: cho phép lần này · 2/n/Esc: từ chối · ← → và Enter để chọn\n");
+        const render = () => {
+            const label = `${allow ? "❯" : " "} Cho phép  ${allow ? " " : "❯"} Từ chối`;
+            const view = inputViewport(label, allow ? 0 : label.length, Math.max(4, (this.output.columns || 80) - 1));
+            this.output.write(`\r\u001b[2K${view.text}`);
+        };
+        return await new Promise(resolve => {
+            let done = false;
+            const finish = (accepted) => {
+                if (done)
+                    return;
+                done = true;
+                this.input.off("keypress", keypress);
+                this.output.off("resize", render);
+                this.rl.off("close", cancel);
+                signal.removeEventListener("abort", cancel);
+                if (!this.closed)
+                    this.rl.write(null, { ctrl: true, name: "u" });
+                this.output.write(`\r\u001b[2K${accepted ? "✓ Đã cho phép lần này — đang tiếp tục…" : "Đã từ chối."}\n`);
+                resolve(accepted);
+            };
+            const cancel = () => finish(false);
+            const keypress = (text, key) => {
+                if (key.ctrl && key.name === "c")
+                    return cancel();
+                if (key.name === "escape" || text === "2" || text?.toLowerCase() === "n")
+                    return finish(false);
+                if (text === "1" || text?.toLowerCase() === "y")
+                    return finish(true);
+                if (["left", "right", "up", "down", "tab"].includes(key.name ?? "")) {
+                    allow = !allow;
+                    render();
+                }
+                if (key.name === "return" || key.name === "enter")
+                    finish(allow);
+            };
+            this.input.on("keypress", keypress);
+            this.output.on("resize", render);
+            this.rl.once("close", cancel);
+            signal.addEventListener("abort", cancel, { once: true });
+            render();
+        });
+    }
     async read() {
         if (this.closed)
             return undefined;

@@ -82,7 +82,7 @@ export async function runShell(cwd = process.cwd()) {
         delete pending[state.agent];
         printAgentTitle(state.agent);
         try {
-            const result = await runAgent(state.agent, prompt, repo.cwd, state.currentSessionId);
+            const result = await runAgent(state.agent, prompt, repo.cwd, state.currentSessionId, (request, signal) => reader.approve(request, signal), reader.signal);
             state.currentSessionId = result.sessionId;
             if (result.exitCode === 0 && result.sessionId) {
                 const key = `${state.agent}:${result.sessionId}`;

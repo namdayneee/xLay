@@ -120,3 +120,40 @@ test("piped input and EOF finish without terminal cursor escapes", async () => {
     assert.doesNotMatch(transcript, /\u001b\[\d*[ABGK]/);
   } finally { reader.close(); }
 });
+
+test("approval is one key, defaults to deny, and does not leak into the next prompt", async () => {
+  const f = fixture(80, 16);
+  try {
+    const request = { agent: "claude" as const, title: "Write README.md", details: { file: "README.md", content: "hello" } };
+    for (const [key, expected] of [["y", true], ["\r", false], ["\u001b[D\r", true], ["n", false]] as const) {
+      const answer = f.reader.approve(request, new AbortController().signal);
+      await f.flush();
+      f.input.write(key);
+      assert.equal(await answer, expected);
+    }
+    const next = f.reader.read();
+    f.input.write("next task\r");
+    assert.equal(await next, "next task");
+    assert.equal(f.output.listenerCount("resize"), 0);
+  } finally { f.reader.close(); f.terminal.dispose(); }
+});
+
+test("approval abort, EOF and noninteractive input fail closed", async () => {
+  const f = fixture();
+  const request = { agent: "codex" as const, title: "write", details: {} };
+  try {
+    const controller = new AbortController();
+    const answer = f.reader.approve(request, controller.signal);
+    await f.flush();
+    controller.abort();
+    assert.equal(await answer, false);
+    assert.equal(f.output.listenerCount("resize"), 0);
+    const closed = f.reader.approve(request, new AbortController().signal);
+    await f.flush();
+    f.reader.close();
+    assert.equal(await closed, false);
+  } finally { f.reader.close(); f.terminal.dispose(); }
+  const reader = new ShellInput(new PassThrough(), new PassThrough());
+  try { assert.equal(await reader.approve(request, new AbortController().signal), false); }
+  finally { reader.close(); }
+});
