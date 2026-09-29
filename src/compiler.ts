@@ -1,15 +1,20 @@
-import type { JevDecision, RepoContext } from "./types.js";
+import type { TurnPolicy, RepoContext } from "./types.js";
 import { compactUserMessage } from "./jev/compact.js";
 
-export function compileAgentPrompt(input: string, decision: JevDecision, repo: RepoContext): string {
-  const request = compactUserMessage(input, decision.safeToCompact);
-  const hints = repo.candidateFiles.length ? repo.candidateFiles.join(" | ") : "none";
-  const validation = decision.needsValidation >= 0.7 ? "yes" : "only if needed/requested";
+export function compileAgentPrompt(input: string, policy: TurnPolicy, repo: RepoContext): string {
+  if (policy.dispatch !== "run") throw new Error("Cannot compile a turn awaiting clarification");
+  const request = compactUserMessage(input, policy.compact ? 1 : 0);
+  const hints = repo.candidateFiles.slice(0, policy.contextLimit);
 
   return [
-    `<xlay_request>${request}</xlay_request>`,
-    `<xlay_decision>task=${decision.taskType.value}; mode=${decision.actionMode.value}; scope=${decision.scope.value}; validate=${validation}</xlay_decision>`,
-    `<xlay_context>${hints}</xlay_context>`,
-    "Rules: preserve every explicit user restriction; verify context before editing; do not broaden scope; treat context paths as hints, not facts; if mode is inspect_only or explain_only, do not edit files; otherwise implement the request and validate relevant changes before finishing when practical.",
+    `xLay: mode=${policy.mode}; scope=${policy.scope}. User constraints prevail.`,
+    policy.mode === "act" ? "Validate relevant changes if permitted." : "Read only; no mutations.",
+    ...(policy.mode !== "act" && policy.validation === "relevant" ? ["Validate only if permitted and non-mutating."] : []),
+    ...(hints.length ? [
+      `Hints relative to ${JSON.stringify(repo.root ?? repo.cwd)}; verify before editing, expand search if insufficient:`,
+      JSON.stringify(repo.candidates?.slice(0, policy.contextLimit).map(({ path, excerpt }) => ({ path, ...(excerpt ? { excerpt } : {}) })) ?? hints),
+    ] : []),
+    "Request:",
+    request,
   ].join("\n");
 }

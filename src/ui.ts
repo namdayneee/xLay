@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { AgentName, JevDecision } from "./types.js";
+import type { AgentName, JevDecision, TurnPolicy } from "./types.js";
 
 const esc = "\u001b[";
 const reset = `${esc}0m`;
@@ -62,12 +62,11 @@ export function printAgentSwitch(agent: AgentName): void {
   console.log(`\n${c.dim("agent →")} ${agentLabel(agent)}\n`);
 }
 
-export function printJevSummary(decision: JevDecision, candidateCount: number): void {
-  const pct = Math.round(decision.taskType.confidence * 100);
+export function printJevSummary(decision: JevDecision, policy: TurnPolicy, candidateCount: number): void {
   const source = decision.source === "api" ? "Jev" : "local";
   console.log(
     c.dim(
-      `${source}: ${decision.taskType.value} ${pct}% · scope ${decision.scope.value} · context ${candidateCount}`,
+      `${source}: ${policy.dispatch} · ${policy.mode} · scope ${policy.scope} · context ${candidateCount}/${policy.contextLimit} · validation ${policy.validation}${policy.reasons.length ? ` · ${policy.reasons.join(", ")}` : ""}${decision.fallbackReason ? ` · ${decision.fallbackReason}` : ""}`,
     ),
   );
 }

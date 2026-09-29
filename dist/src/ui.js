@@ -55,10 +55,9 @@ export function printHeader(cwd, agent, jevReady) {
 export function printAgentSwitch(agent) {
     console.log(`\n${c.dim("agent →")} ${agentLabel(agent)}\n`);
 }
-export function printJevSummary(decision, candidateCount) {
-    const pct = Math.round(decision.taskType.confidence * 100);
+export function printJevSummary(decision, policy, candidateCount) {
     const source = decision.source === "api" ? "Jev" : "local";
-    console.log(c.dim(`${source}: ${decision.taskType.value} ${pct}% · scope ${decision.scope.value} · context ${candidateCount}`));
+    console.log(c.dim(`${source}: ${policy.dispatch} · ${policy.mode} · scope ${policy.scope} · context ${candidateCount}/${policy.contextLimit} · validation ${policy.validation}${policy.reasons.length ? ` · ${policy.reasons.join(", ")}` : ""}${decision.fallbackReason ? ` · ${decision.fallbackReason}` : ""}`));
 }
 export function printAgentTitle(agent) {
     console.log(`\n${agentLabel(agent)}\n`);

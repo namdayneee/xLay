@@ -44,7 +44,15 @@ export function extractKeywords(input: string): string[] {
     .map((word) => word.trim())
     .filter((word) => word.length >= 3 && !STOP_WORDS.has(word));
 
-  return [...new Set(normalized)].slice(0, 16);
+  const aliases: Array<[RegExp, string[]]> = [
+    [/đăng nhập|dang nhap|xác thực|xac thuc/iu, ["login", "auth", "session"]],
+    [/thanh toán|thanh toan/iu, ["payment", "billing", "checkout"]],
+    [/cơ sở dữ liệu|co so du lieu/iu, ["database", "schema", "migration"]],
+    [/giao diện|giao dien/iu, ["ui", "view", "component"]],
+    [/kiểm thử|kiem thu/iu, ["test", "spec"]],
+  ];
+  const expanded = aliases.filter(([pattern]) => pattern.test(input)).flatMap(([, words]) => words);
+  return [...new Set([...expanded, ...normalized])].slice(0, 24);
 }
 
 export function scorePath(filePath: string, keywords: string[]): number {

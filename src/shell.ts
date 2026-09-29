@@ -1,10 +1,10 @@
 import { stdin as input, stdout as output } from "node:process";
+import { createHash } from "node:crypto";
+import { normalizeUsage } from "./metrics.js";
 import { runAgent } from "./agents/index.js";
-import { compileAgentPrompt } from "./compiler.js";
 import { loadConfig, resolveJevApiKey, resolveJevEndpoint } from "./config.js";
-import { collectRepoContext } from "./context/repo.js";
 import { appendHistory } from "./history.js";
-import { analyzeWithJev } from "./jev/client.js";
+import { prepareTurn } from "./turn.js";
 import { commandExists } from "./process.js";
 import { ShellState } from "./session/state.js";
 import { ShellInput } from "./input.js";
@@ -32,8 +32,12 @@ export async function runShell(cwd = process.cwd()): Promise<void> {
   const endpoint = resolveJevEndpoint(config);
   const state = new ShellState(config.defaultAgent);
   const reader = new ShellInput(input, output);
+  const pending: Partial<Record<"claude" | "codex", string>> = {};
+  const contextMemory = new Map<string, Map<string, string>>();
+  const baseline = process.env.XLAY_BENCHMARK_BASELINE === "1";
 
-  printHeader(cwd, state.agent, Boolean(apiKey));
+  printHeader(cwd, state.agent, config.jev.enabled && Boolean(apiKey));
+  if (baseline) console.log(c.yellow("Benchmark baseline: requests are forwarded verbatim; Jev/context optimization is off."));
 
   while (true) {
     const raw = await reader.read();
@@ -58,24 +62,46 @@ export async function runShell(cwd = process.cwd()): Promise<void> {
       continue;
     }
 
-    const repo = collectRepoContext(cwd, message, config.context.maxCandidateFiles);
-    const decision = await analyzeWithJev({
+    const request = pending[state.agent]
+      ? `${pending[state.agent]}\n\nUser clarification:\n${raw}` : raw;
+    const startedAt = Date.now();
+    const taskId = createHash("sha256").update(`${cwd}\0${state.agent}\0${request}`).digest("hex");
+    const memoryKey = `${state.agent}:${state.currentSessionId ?? ""}`;
+    const { repo, decision, policy, prompt, metrics } = await prepareTurn({
       apiKey,
       config,
       endpoint,
-      input: message,
+      input: request,
       agent: state.agent,
-      repo,
+      cwd,
+      hasSession: Boolean(state.currentSessionId),
+      seenContext: contextMemory.get(memoryKey),
+      baseline,
     });
-    printJevSummary(decision, repo.candidateFiles.length);
+    printJevSummary(decision, policy, repo.candidateFiles.length);
+    if (prompt === undefined) {
+      pending[state.agent] = request;
+      appendHistory({ agent: state.agent, decision, policy, repo: repo.repoName, metrics, taskId });
+      console.log("xLay: Please clarify the target, desired outcome, and whether to edit or inspect. Your original request is retained; the next message adds clarification.");
+      continue;
+    }
+    delete pending[state.agent];
 
-    const prompt = compileAgentPrompt(message, decision, repo);
     printAgentTitle(state.agent);
 
     try {
       const result = await runAgent(state.agent, prompt, repo.cwd, state.currentSessionId);
       state.currentSessionId = result.sessionId;
-      appendHistory({ agent: state.agent, decision, repo: repo.repoName, exitCode: result.exitCode });
+      if (result.exitCode === 0 && result.sessionId) {
+        const key = `${state.agent}:${result.sessionId}`;
+        const remembered = contextMemory.get(key) ?? new Map<string, string>();
+        for (const candidate of repo.candidates ?? []) if (candidate.excerpt) remembered.set(candidate.path, candidate.fingerprint);
+        contextMemory.set(key, remembered);
+      }
+      appendHistory({ agent: state.agent, decision, policy, repo: repo.repoName, exitCode: result.exitCode,
+        usage: result.usage, metrics, taskId, mode: baseline ? "baseline" : "optimized", durationMs: Date.now() - startedAt });
+      const tokens = normalizeUsage(state.agent, result.usage);
+      console.log(c.dim(`usage: ${tokens ? `${tokens.input} input (${tokens.cached} cached), ${tokens.output} output` : "unavailable"} · context ${metrics.selectedChars}/${metrics.candidateChars} chars · reused ${metrics.reusedChars}`));
       if (result.exitCode !== 0) printError(`${state.agent} exited with code ${result.exitCode}.`);
     } catch (error) {
       printError(error instanceof Error ? error.message : String(error));

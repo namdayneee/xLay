@@ -8,7 +8,7 @@ export function runDoctor() {
         ["git", commandExists("git")],
         ["claude", commandExists("claude")],
         ["codex", commandExists("codex")],
-        ["Jev API key", Boolean(resolveJevApiKey())],
+        ["TypeSafe API key", Boolean(resolveJevApiKey())],
     ];
     console.log(`\n${c.bold("xLay doctor")}\n`);
     for (const [name, ok] of rows)

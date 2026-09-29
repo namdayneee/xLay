@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "check": "npm run build && node --test dist/tests/*.test.js",
+    "compare": "npm run build && node dist/src/benchmark.js",
     "dev": "tsx src/cli.ts"
   },
   "devDependencies": {

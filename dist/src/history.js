@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getPaths } from "./config.js";
+import { normalizeUsage } from "./metrics.js";
 export function appendHistory(entry) {
     try {
         const file = path.join(getPaths().home, "history.jsonl");
@@ -12,6 +13,16 @@ export function appendHistory(entry) {
             taskConfidence: entry.decision.taskType.confidence,
             jevSource: entry.decision.source,
             jevUsage: entry.decision.usage,
+            jevModel: entry.decision.model,
+            jevAttempted: entry.decision.apiAttempted,
+            fallbackReason: entry.decision.fallbackReason,
+            policy: entry.policy,
+            agentUsage: entry.usage,
+            tokens: normalizeUsage(entry.agent, entry.usage),
+            metrics: entry.metrics,
+            durationMs: entry.durationMs,
+            mode: entry.mode ?? "optimized",
+            taskId: entry.taskId,
             exitCode: entry.exitCode,
         })}\n`, "utf8");
     }

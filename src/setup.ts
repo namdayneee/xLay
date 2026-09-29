@@ -15,12 +15,12 @@ export async function runSetup(): Promise<void> {
   console.log();
 
   const key = await rl.question(
-    credentials.jevApiKey || process.env.JEV_API_KEY
-      ? "Jev API key already exists. Press Enter to keep it, or paste a replacement: "
-      : "Paste your Jev API key (Enter = local fallback for now): ",
+    credentials.typesafeApiKey || process.env.TYPESAFE_API_KEY
+      ? "TypeSafe API key already exists. Press Enter to keep it, or paste a replacement: "
+      : "Paste your TypeSafe API key from console.typesafe.ai (Enter = local fallback): ",
   );
 
-  if (key.trim()) credentials.jevApiKey = key.trim();
+  if (key.trim()) credentials.typesafeApiKey = key.trim();
   config.defaultAgent = "claude";
   config.jev = { ...DEFAULT_CONFIG.jev, ...config.jev, enabled: true };
 
@@ -33,8 +33,8 @@ export async function runSetup(): Promise<void> {
   console.log(`Default agent: ${c.cyan("Claude")}`);
   console.log(`Config: ${paths.config}`);
   console.log(`Credentials: ${paths.credentials}`);
-  if (!credentials.jevApiKey && !process.env.JEV_API_KEY) {
-    console.log(c.yellow("No Jev key yet; xLay will use the local fallback until you add one."));
+  if (!credentials.typesafeApiKey && !process.env.TYPESAFE_API_KEY) {
+    console.log(c.yellow("No TypeSafe key yet; xLay will use local fallback. Legacy Jev service keys are not reused."));
   }
   console.log();
 }

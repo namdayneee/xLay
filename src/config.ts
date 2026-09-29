@@ -12,8 +12,8 @@ export const DEFAULT_CONFIG: XLayConfig = {
   defaultAgent: "claude",
   jev: {
     enabled: true,
-    endpoint: "https://jev-api.org/api/v1/decisions",
-    model: "jev-1.13",
+    endpoint: "https://api.typesafe.ai/v1/systemone",
+    model: "jev-1.13.0",
     timeoutMs: 15000,
   },
   context: {
@@ -34,15 +34,21 @@ export function loadConfig(): XLayConfig {
   if (!fs.existsSync(CONFIG_PATH)) return structuredClone(DEFAULT_CONFIG);
   try {
     const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8")) as Partial<XLayConfig>;
-    return {
-      ...DEFAULT_CONFIG,
-      ...parsed,
-      jev: { ...DEFAULT_CONFIG.jev, ...(parsed.jev ?? {}) },
-      context: { ...DEFAULT_CONFIG.context, ...(parsed.context ?? {}) },
-    };
+    return normalizeConfig(parsed);
   } catch {
     return structuredClone(DEFAULT_CONFIG);
   }
+}
+
+export function normalizeConfig(parsed: Partial<XLayConfig>): XLayConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    ...parsed,
+    jev: { ...DEFAULT_CONFIG.jev, ...(parsed.jev ?? {}),
+      endpoint: DEFAULT_CONFIG.jev.endpoint,
+      model: !parsed.jev?.model || parsed.jev.model === "jev-1.13" ? DEFAULT_CONFIG.jev.model : parsed.jev.model },
+    context: { ...DEFAULT_CONFIG.context, ...(parsed.context ?? {}) },
+  };
 }
 
 export function saveConfig(config: XLayConfig): void {
@@ -69,9 +75,9 @@ export function saveCredentials(credentials: XLayCredentials): void {
 }
 
 export function resolveJevApiKey(): string | undefined {
-  return process.env.JEV_API_KEY?.trim() || loadCredentials().jevApiKey?.trim() || undefined;
+  return process.env.TYPESAFE_API_KEY?.trim() || loadCredentials().typesafeApiKey?.trim() || undefined;
 }
 
-export function resolveJevEndpoint(config: XLayConfig): string {
-  return process.env.JEV_API_URL?.trim() || config.jev.endpoint;
+export function resolveJevEndpoint(_config: XLayConfig): string {
+  return DEFAULT_CONFIG.jev.endpoint;
 }

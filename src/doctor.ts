@@ -9,7 +9,7 @@ export function runDoctor(): void {
     ["git", commandExists("git")],
     ["claude", commandExists("claude")],
     ["codex", commandExists("codex")],
-    ["Jev API key", Boolean(resolveJevApiKey())],
+    ["TypeSafe API key", Boolean(resolveJevApiKey())],
   ] as const;
 
   console.log(`\n${c.bold("xLay doctor")}\n`);

@@ -2,7 +2,21 @@ export type AgentName = "claude" | "codex";
 
 export type JevSource = "api" | "local-fallback";
 
+export interface TurnPolicy {
+  dispatch: "run" | "clarify";
+  mode: JevDecision["actionMode"]["value"];
+  scope: JevDecision["scope"]["value"];
+  contextLimit: number;
+  compact: boolean;
+  validation: "relevant" | "on_request";
+  reasons: string[];
+}
+
 export interface JevDecision {
+  model?: string;
+  fallbackReason?: string;
+  apiAttempted?: boolean;
+  relevance?: Record<string, { score: number; confidence: number }>;
   taskType: {
     value: "bug_fix" | "feature" | "refactor" | "explain" | "review" | "other";
     confidence: number;
@@ -25,15 +39,34 @@ export interface JevDecision {
   usage?: {
     inputTokens?: number;
     outputTokens?: number;
-    creditsUsed?: number;
   };
 }
 
 export interface RepoContext {
+  root?: string;
+  candidates?: ContextCandidate[];
   repoName: string;
   cwd: string;
   isGitRepo: boolean;
   candidateFiles: string[];
+}
+
+export interface ContextCandidate {
+  localScore?: number;
+  path: string;
+  excerpt: string;
+  fingerprint: string;
+  explicit: boolean;
+}
+
+export interface TurnMetrics {
+  requestChars: number;
+  promptChars: number;
+  candidateChars: number;
+  selectedChars: number;
+  reusedChars: number;
+  selectedFiles: number;
+  contextSource: "jev" | "local";
 }
 
 export interface AgentRunResult {
@@ -57,5 +90,6 @@ export interface XLayConfig {
 }
 
 export interface XLayCredentials {
+  typesafeApiKey?: string;
   jevApiKey?: string;
 }
